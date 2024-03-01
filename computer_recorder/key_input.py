@@ -124,12 +124,6 @@ class KeyInput:
             if self.exit_key_pressed:
                 self.exit_key_pressed()
 
-        # If it was the enter key...
-        if key == keyboard.Key.enter:
-            # ...call the enter_key_pressed
-            if self.enter_key_pressed:
-                self.enter_key_pressed()
-
         # Call key_pressed callback
         if self.key_pressed:
             self.key_pressed(key_string)
@@ -148,3 +142,9 @@ class KeyInput:
         # Call key_released callback
         if self.key_released:
             self.key_released(key_string)
+
+        # If it was the enter key...
+        if key == keyboard.Key.enter:
+            # ...call the enter_key_pressed
+            if self.enter_key_pressed:
+                self.enter_key_pressed()
