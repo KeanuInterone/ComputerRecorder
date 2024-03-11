@@ -40,6 +40,10 @@ class ScreenInput:
         self.on_screenshot = on_screenshot
         self.is_listening = False
 
+        # Get frame coordinates
+        self.left = int(self.frame_center[0] - (frame_size / 2))
+        self.top = int(self.frame_center[1] - (frame_size / 2))
+
     # START LISTENER
     def start_listener(self):
         """
@@ -76,7 +80,14 @@ class ScreenInput:
         with the image
         """
         if self.on_screenshot:
-            img = pyautogui.screenshot()
+            img = pyautogui.screenshot(
+                region=(
+                    self.left, 
+                    self.top, 
+                    self.frame_size, 
+                    self.frame_size
+                )
+            )
             img = cv2.cvtColor(np.array(img), cv2.COLOR_BGR2RGB)
             self.on_screenshot(img)
 

@@ -3,6 +3,7 @@ from .screen_input import ScreenInput
 import pickle
 import os
 import time
+import numpy as np
 
 ##################
 # INPUT RECORDER #
@@ -166,7 +167,7 @@ class InputRecorder:
         if self.record_keys:
             recording['key_input_events'] = self.key_stroke_events
         if self.record_screen:
-            recording['video'] = self.screen_video_frames
+            recording['video'] = np.array(self.screen_video_frames)
         
         # Return if there is nothing recorded
         if not recording:
