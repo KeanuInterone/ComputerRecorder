@@ -19,8 +19,7 @@ class InputRecorder:
     # INITIALIZE
     def __init__(
             self,
-            record_keys=False,
-            record_screen=False,
+            keys_to_track=['Key.up', 'Key.left', 'Key.right', 'Key.down'],
             screen_input_frame_size=256,
             screen_input_frame_center=(128, 128),
             screen_input_fps=60,
@@ -32,43 +31,41 @@ class InputRecorder:
         of your key strokes and screen
 
         Args:
-            record_keys (bool, optional): weather or not to record key strokes
-            record_screen (bool, optional): weather or not to record screen
+            keys_to_track (array(string), options): Defaults to up, left, right, down keys
             screen_input_frame_size (int, optional): Size of one side of a square frame
             screen_input_frame_center (tuple (x, y), optional): Center of the square frame
             screen_input_fps (int, optional): Frames per second of recording
             enter_key_pressed (function, optional): Function that is called when enter key is pressed
             esc_key_pressed (function, optional): Function that is called when esc key is pressed
         """
-        # Instance variables
-        self.record_keys = record_keys
-        self.record_screen = record_screen
 
-        # Key input - create this so that we can listen to enter and esc key presses
+        # Key input
         self.key_input = KeyInput(
             key_pressed=self.key_pressed,
             key_released=self.key_released,
             enter_key_pressed=enter_key_pressed,
             exit_key_pressed=esc_key_pressed
-            )
+        )
+        # Start to imediately start listening for enter and esc keys
         self.key_input.start_listener()
 
         # Screen Input
-        self.screen_input = None
-        if self.record_screen:
-            self.screen_input = ScreenInput(
-                frame_size=screen_input_frame_size,
-                frame_center=screen_input_frame_center,
-                fps=screen_input_fps,
-                on_screenshot=self.on_screenshot
-                )
+        self.screen_input = ScreenInput(
+            frame_size=screen_input_frame_size,
+            frame_center=screen_input_frame_center,
+            fps=screen_input_fps,
+            on_screenshot=self.on_screenshot
+        )
 
         # Is recording flag
         self.is_recording = False
 
+        # Dict for key states 
+        self.key_state = {key: 0 for key in keys_to_track}
+
         # Recording logs
-        self.key_stroke_events = []
-        self.screen_video_frames = []
+        self.key_frames = []
+        self.screen_frames = []
 
 
     # START NEW RECORDING
@@ -78,14 +75,13 @@ class InputRecorder:
         If
         """
         # Reset logs
-        self.key_stroke_events = []
-        self.screen_video_frames = []
+        self.key_events = []
+        self.key_frames = []
+        self.screen_frames = []
 
-        # If recording screen...
-        if self.record_screen:
-            # ... start the screen listener - start_listener just returns if already listening
-            self.screen_input.start_listener()
-
+        # Start the screen listener - start_listener just returns if already listening
+        self.screen_input.start_listener()
+            
         # Set is recording to true
         self.is_recording = True
 
@@ -95,62 +91,64 @@ class InputRecorder:
         """
         Stops recording
         """
-        # If recording screen...
-        if self.record_screen:
-            # ... stop the screen listener
-            self.screen_input.stop_listener()
-
-         # Flip recording flag
+        # Stop the screen listener
+        self.screen_input.stop_listener()
+            
+        # Flip recording flag
         self.is_recording = False
 
 
     # ON KEY PRESSED
     def key_pressed(self, key):
         """
-        Callback for KeyInput, called whenever a key is pressed. Logs the event
-        of a key press. Returns if not recording or not recording keys.
+        Callback for KeyInput, called whenever a key is pressed. Changes the state
+        of keys pressed. Returns if not recording.
         """
-        # If we are not recording or not recording keys...
-        if not self.is_recording or not self.record_keys:
-            # ... don't log anything
+        # If we are not recording...
+        if not self.is_recording:
+            # ... don't change anything
             return
         
-        # Add the event to the event list
-        self.key_stroke_events.append(f'{key} pressed')
+        # Set key to pressed in key state
+        if key in self.key_state:
+            self.key_state[key] = 1
         
             
 
     # ON KEY RELEASED
     def key_released(self, key):
         """
-        Callback for KeyInput, called whenever a key is released. Logs the event
-        of a key release. Returns if not recording or not recording keys.
+         Callback for KeyInput, called whenever a key is released. Changes the state
+        of keys pressed. Returns if not recording.
         """
-        # If we are not recording or not recording keys......
-        if not self.is_recording or not self.record_keys:
-            # ... don't log anything
+        # If we are not recording...
+        if not self.is_recording:
+            # ... don't change anything
             return
         
-        # Add the event to the event list
-        self.key_stroke_events.append(f'{key} released')
+        # Set key to released in key state
+        if key in self.key_state:
+            self.key_state[key] = 0
 
 
     # ON SCREENSHOT
     def on_screenshot(self, img):
         """
         Callback for ScreenInput. Called frames per second every second when ScreenInput
-        is listening. Logs the image. Returns if not recording or recording screen
+        is listening. Logs the image. Also logs the key state. Returns if not recording
+        or recording screen
 
         ARGS:
             img (np.array): image of the specified area of the screen
         """
-        # If we are not recording or not recording screen......
-        if not self.is_recording or not self.record_screen:
+        # If we are not recording...
+        if not self.is_recording:
             # ... don't log anything
             return
         
-        # Add screenshot to screen recording
-        self.screen_video_frames.append(img)
+        # Add screenshot and keystate logs
+        self.screen_frames.append(img)
+        self.key_frames.append(list(self.key_state.values()))
 
     
     # ON SAVE
@@ -164,14 +162,8 @@ class InputRecorder:
         """
         # Create recording object
         recording = {}
-        if self.record_keys:
-            recording['key_input_events'] = self.key_stroke_events
-        if self.record_screen:
-            recording['video'] = np.array(self.screen_video_frames)
-        
-        # Return if there is nothing recorded
-        if not recording:
-            return
+        recording['key_frames'] = np.array(self.key_frames)
+        recording['screen_frames'] = np.array(self.screen_frames)
         
         # Create the file name
         timestamp = int(time.time())

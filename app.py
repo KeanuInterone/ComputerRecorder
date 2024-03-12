@@ -39,8 +39,7 @@ def main():
 
     # CREATE THE INPUT RECORDER WITH THE RECORDING CENTER
     input_recorder = InputRecorder(
-            record_keys=True,
-            record_screen=True,
+            keys_to_track=['Key.up', 'Key.left', 'Key.right', 'Key.down'],
             screen_input_fps=10,
             screen_input_frame_size=256,
             screen_input_frame_center=recording_center,
@@ -74,3 +73,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# THE GAME
+# https://www.crazygames.com/game/rally-racer-dirt
