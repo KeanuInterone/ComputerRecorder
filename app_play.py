@@ -27,32 +27,53 @@ def main():
         waiting_for_input = False
 
 
-    video_input = np.array([np.zeros((20, 256, 256, 3))], dtype=np.float32)
-    action_input = np.array([np.zeros((19, 4))], dtype=np.float32)
+    # video_input = np.array([np.zeros((20, 256, 256, 3))], dtype=np.float32)
+    # action_input = np.array([np.zeros((19, 4))], dtype=np.float32)
+    video_frame_segment_shape = (20, 256, 256, 3)
+    key_frame_segment_shape = (19, 4)
+    key_threshold = 0.011
+    video_frame_segment = np.zeros(video_frame_segment_shape, dtype=np.float32)
+    key_frame_segment = np.zeros(key_frame_segment_shape, dtype=np.float32)
     key_state = [0, 0, 0, 0]
+    itteration = 0
     def on_screenshot(img):
         nonlocal keyboard
         nonlocal infer
         nonlocal key_state
-        nonlocal video_input
-        nonlocal action_input
+        # nonlocal video_input
+        # nonlocal action_input
+        nonlocal video_frame_segment
+        nonlocal key_frame_segment
+        nonlocal key_threshold
+        nonlocal itteration
 
+        # Normalize and convert the new image
         image = (np.array(img) / 255.0).astype(np.float32)
-        video_input[0] = np.roll(video_input[0], -1)
-        video_input[0][19] = image
+
+        # Shift and place new image at the end of video_frame_segment
+        video_frame_segment = np.roll(video_frame_segment, -1, axis=0)
+        video_frame_segment[-1] = image
         
+        # Infer the next key state
+        result = infer(
+            video_input=tf.constant([video_frame_segment]),
+            action_input=tf.constant([key_frame_segment])
+            )
+        raw_pred = np.array(result['dense'][0])
+        print(raw_pred)
+        y = (raw_pred > key_threshold).astype(np.float32)
 
-        result = infer(video_input=tf.constant(video_input), action_input=tf.constant(action_input))
-        y = (np.array(result['dense'][0]) > 0.5).astype(np.float32)
-        print(y)
+        # Shift and place new key prediction at the end of key_frame_segment
+        key_frame_segment = np.roll(key_frame_segment, -1, axis=0)
+        key_frame_segment[-1] = y
 
-        action_input[0] = np.roll(action_input[0], -1)
-        action_input[0][18] = y
+        # print(f'VIDEO FRAME SEGMENT: {itteration}')
+        # print(video_frame_segment)
+        # print(f'KEY FRAME SEGMENT: {itteration}')
+        # print(key_frame_segment)
+        # itteration = itteration + 1
 
-        print("VIDEO INPUT!!!!")
-        print(video_input)
-        print("ACTION_INPUT!!!")
-        print(action_input)
+        # Push the keys!
 
         # Up
         if y[0] != key_state[0]:
