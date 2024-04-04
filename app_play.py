@@ -3,13 +3,23 @@ from computer_recorder.mouse_input import MouseInput
 from computer_recorder.key_input import KeyInput
 from computer_recorder.screen_input import ScreenInput
 import tensorflow as tf
-#import tensorflow_hub as hub
 import numpy as np
-# from tensorflow.python.framework.ops import disable_eager_execution
-# disable_eager_execution()
+import time
+
 
 def main():
 
+    # CONFIGURATION
+    model_path = '/Users/keanuinterone/Projects/ComputerRecorder/Models/model_5.2.1.1.tflite'
+    video_frame_segment_shape = (20, 256, 256, 3)
+    key_threshold = 0.5
+    fps=10
+
+    # INITIALIZATION
+    video_frame_segment = np.zeros(video_frame_segment_shape, dtype=np.float32)
+    key_state = [0, 0, 0, 0]
+
+    # ON CLICK
     def on_click(x, y):
         nonlocal recording_center
         nonlocal waiting_for_input
@@ -18,34 +28,25 @@ def main():
         recording_center = (x, y)
         waiting_for_input = False
 
+    # ON ENTER KEY PRESSED
     def enter_key_pressed():
         nonlocal waiting_for_input
         waiting_for_input = False
 
+    # ON ESC KEY PRESSED
     def esc_key_pressed():
         nonlocal waiting_for_input
         waiting_for_input = False
 
-
-    # video_input = np.array([np.zeros((20, 256, 256, 3))], dtype=np.float32)
-    # action_input = np.array([np.zeros((19, 4))], dtype=np.float32)
-    video_frame_segment_shape = (20, 256, 256, 3)
-    key_frame_segment_shape = (19, 4)
-    key_threshold = 0.011
-    video_frame_segment = np.zeros(video_frame_segment_shape, dtype=np.float32)
-    key_frame_segment = np.zeros(key_frame_segment_shape, dtype=np.float32)
-    key_state = [0, 0, 0, 0]
-    itteration = 0
+    # ON SCREENSHOT
     def on_screenshot(img):
         nonlocal keyboard
-        nonlocal infer
         nonlocal key_state
-        # nonlocal video_input
-        # nonlocal action_input
         nonlocal video_frame_segment
-        nonlocal key_frame_segment
         nonlocal key_threshold
-        nonlocal itteration
+        nonlocal interpreter
+        nonlocal input_details
+        nonlocal output_details
 
         # Normalize and convert the new image
         image = (np.array(img) / 255.0).astype(np.float32)
@@ -53,32 +54,27 @@ def main():
         # Shift and place new image at the end of video_frame_segment
         video_frame_segment = np.roll(video_frame_segment, -1, axis=0)
         video_frame_segment[-1] = image
+
+        # Run inference
+        start_time = time.time()
+        interpreter.set_tensor(input_details[0]['index'], [video_frame_segment])
+        try:
+            interpreter.invoke()
+        except:
+            return
         
-        # Infer the next key state
-        result = infer(
-            video_input=tf.constant([video_frame_segment]),
-            action_input=tf.constant([key_frame_segment])
-            )
-        raw_pred = np.array(result['dense'][0])
-        print(raw_pred)
+        # Get output tensor
+        raw_pred = interpreter.get_tensor(output_details[0]['index'])[0]
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+        print(f"Inference Time : {elapsed_time:.4f} seconds")
         y = (raw_pred > key_threshold).astype(np.float32)
-
-        # Shift and place new key prediction at the end of key_frame_segment
-        key_frame_segment = np.roll(key_frame_segment, -1, axis=0)
-        key_frame_segment[-1] = y
-
-        # print(f'VIDEO FRAME SEGMENT: {itteration}')
-        # print(video_frame_segment)
-        # print(f'KEY FRAME SEGMENT: {itteration}')
-        # print(key_frame_segment)
-        # itteration = itteration + 1
+        print(y)
 
         # Push the keys!
-
         # Up
         if y[0] != key_state[0]:
             if y[0]:
-                print('Up!')
                 keyboard.press(Key.up)
                 key_state[0] = 1
             else:
@@ -88,7 +84,6 @@ def main():
         # Left
         if y[1] != key_state[1]:
             if y[1]:
-                print('Left!')
                 keyboard.press(Key.left)
                 key_state[1] = 1
             else:
@@ -98,7 +93,6 @@ def main():
         # Right
         if y[2] != key_state[2]:
             if y[2]:
-                print('Right!')
                 keyboard.press(Key.right)
                 key_state[2] = 1
             else:
@@ -108,7 +102,6 @@ def main():
         # Down
         if y[3] != key_state[3]:
             if y[3]:
-                print('Down!')
                 keyboard.press(Key.down)
                 key_state[3] = 1
             else:
@@ -116,19 +109,11 @@ def main():
                 key_state[3] = 0
 
     # LOAD THE MODEL
-    #model = tf.keras.models.load_model('/Users/keanuinterone/Projects/ComputerRecorder/Models/model_2.0.2.keras')
-    # with open('/Users/keanuinterone/Projects/ComputerRecorder/Models/model_2.0.2_architecture.json', 'r') as f:
-    #     model = tf.keras.models.model_from_json(f.read(), custom_objects={'KerasLayer':hub.KerasLayer})
-                
-    model = tf.saved_model.load('/Users/keanuinterone/Projects/ComputerRecorder/Models/model_two')
-    print(list(model.signatures.keys()))
-    infer = model.signatures['serving_default']
-                
-    # model = tf.keras.models.load_model(
-    #   ('/Users/keanuinterone/Projects/ComputerRecorder/Models/model_2.0.2.keras'),
-    #    custom_objects={'KerasLayer':hub.KerasLayer}
-    # )
-    
+    interpreter = tf.lite.Interpreter(model_path=model_path)
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+
     # CREATE MOUSE INPUT TO GET RECORDING AREA CENTER
     mouse_input = MouseInput(
         on_click=on_click
@@ -161,27 +146,11 @@ def main():
     # CREATE KEY CONTROLLER
     keyboard = Controller()
 
-    # LOAD MODEL
-    # Build a new Keras model with the inference layer
-    # video_input = tf.keras.layers.Input(shape=(20, 256, 256, 3), name='video_input')
-    # action_input = tf.keras.layers.Input(shape=(19, 4), name='action_input')
-    # inference_layer = tf.keras.layers.TFSMLayer(
-    #     '/Users/keanuinterone/Projects/ComputerRecorder/Models/model_two', 
-    #     call_endpoint='serving_default', 
-    # )([video_input, action_input])
-    # model = tf.keras.Model(inputs=[video_input, action_input], outputs=inference_layer)
-
-    # video_input = tf.keras.layers.Input(shape=(20, 256, 256, 3), name='video_input')
-    # action_input = tf.keras.layers.Input(shape=(19, 4), name='action_input')
-    # inference_layer = hub.KerasLayer("/Users/keanuinterone/Projects/ComputerRecorder/Models/model_two")([video_input, action_input])
-    # model = tf.keras.Model(inputs=[video_input, action_input], outputs=inference_layer)
-
-
     # CREATE THE SCREEN INPUT WITH THE RECORDING CENTER
     screen_input = ScreenInput(
         frame_size=256,
         frame_center=recording_center,
-        fps=10,
+        fps=fps,
         on_screenshot=on_screenshot
     )
     screen_input.start_listener()
