@@ -10,14 +10,18 @@ import time
 def main():
 
     # CONFIGURATION
-    model_path = '/Users/keanuinterone/Projects/ComputerRecorder/Models/model_5.2.1.1.tflite'
-    video_frame_segment_shape = (20, 256, 256, 3)
-    key_threshold = 0.5
+    model_path = '/Users/keanuinterone/Projects/ComputerRecorder/Models/model_11.0.0.tflite'
+    video_frame_segment_shape = (15, 256, 256, 3)
+    key_frame_segment_shape = (5, 4)
+    scale_image_data = False
+    key_threshold = 0.9
     fps=10
 
     # INITIALIZATION
     video_frame_segment = np.zeros(video_frame_segment_shape, dtype=np.float32)
+    key_frame_segment = np.zeros(key_frame_segment_shape, dtype=np.float32)
     key_state = [0, 0, 0, 0]
+    key_pred_index = 0
 
     # ON CLICK
     def on_click(x, y):
@@ -43,33 +47,57 @@ def main():
         nonlocal keyboard
         nonlocal key_state
         nonlocal video_frame_segment
+        nonlocal key_frame_segment
+        nonlocal key_pred_index
+        nonlocal scale_image_data
         nonlocal key_threshold
         nonlocal interpreter
         nonlocal input_details
         nonlocal output_details
 
         # Normalize and convert the new image
-        image = (np.array(img) / 255.0).astype(np.float32)
+        image = None
+        if (scale_image_data):
+            image = (np.array(img) / 255.0).astype(np.float32)
+        else:
+            image = (np.array(img)).astype(np.float32)
 
         # Shift and place new image at the end of video_frame_segment
         video_frame_segment = np.roll(video_frame_segment, -1, axis=0)
         video_frame_segment[-1] = image
 
-        # Run inference
-        start_time = time.time()
-        interpreter.set_tensor(input_details[0]['index'], [video_frame_segment])
-        try:
-            interpreter.invoke()
-        except:
-            return
-        
-        # Get output tensor
-        raw_pred = interpreter.get_tensor(output_details[0]['index'])[0]
-        end_time = time.time()
-        elapsed_time = end_time - start_time
-        print(f"Inference Time : {elapsed_time:.4f} seconds")
-        y = (raw_pred > key_threshold).astype(np.float32)
+        # If time to get next set of key actions...
+        if (key_pred_index == key_frame_segment_shape[0]):
+
+            # Start timer
+            start_time = time.time()
+
+            # ...Run inference
+            interpreter.set_tensor(input_details[0]['index'], [video_frame_segment])
+            try:
+                interpreter.invoke()
+            except:
+                return
+            
+            # Set key frame segment to prediction
+            raw_pred = interpreter.get_tensor(output_details[0]['index'])[0]
+            print(raw_pred)
+            key_frame_segment = (raw_pred > key_threshold).astype(np.float32)
+
+            # Stop the timer
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            print(f"Inference Time : {elapsed_time:.4f} seconds")
+
+            # Set key pred index back to 0
+            key_pred_index = 0
+
+        # Get the key action
+        y = key_frame_segment[key_pred_index]
         print(y)
+
+        # Increment the key pred index
+        key_pred_index += 1
 
         # Push the keys!
         # Up
